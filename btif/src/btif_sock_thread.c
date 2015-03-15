@@ -109,7 +109,8 @@ static inline void close_cmd_fd(int h);
 
 static inline void add_poll(int h, int fd, int type, int flags, uint32_t user_id);
 
-static pthread_mutex_t thread_slot_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t thread_slot_lock;
+
 
 static inline int create_thread(void *(*start_routine)(void *), void * arg,
                                 pthread_t * thread_id)
@@ -152,6 +153,7 @@ int btsock_thread_init()
     if(!initialized)
     {
         initialized = 1;
+        init_slot_lock(&thread_slot_lock);
         int h;
         for(h = 0; h < MAX_THREAD; h++)
         {
@@ -168,9 +170,9 @@ int btsock_thread_init()
 int btsock_thread_create(btsock_signaled_cb callback, btsock_cmd_cb cmd_callback)
 {
     asrt(callback || cmd_callback);
-    pthread_mutex_lock(&thread_slot_lock);
+    lock_slot(&thread_slot_lock);
     int h = alloc_thread_slot();
-    pthread_mutex_unlock(&thread_slot_lock);
+    unlock_slot(&thread_slot_lock);
     APPL_TRACE_DEBUG("alloc_thread_slot ret:%d", h);
     if(h >= 0)
     {
@@ -318,9 +320,9 @@ int btsock_thread_exit(int h)
     if(send(ts[h].cmd_fdw, &cmd, sizeof(cmd), 0) == sizeof(cmd))
     {
         pthread_join(ts[h].thread_id, 0);
-        pthread_mutex_lock(&thread_slot_lock);
+        lock_slot(&thread_slot_lock);
         free_thread_slot(h);
-        pthread_mutex_unlock(&thread_slot_lock);
+        unlock_slot(&thread_slot_lock);
         return TRUE;
     }
     return FALSE;
